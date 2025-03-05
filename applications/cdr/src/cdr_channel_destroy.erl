@@ -10,6 +10,7 @@
 -module(cdr_channel_destroy).
 
 -export([handle_req/2]).
+-export([should_handle_cdr/1]).
 
 -include("cdr.hrl").
 
@@ -25,18 +26,34 @@
 -define(CHANNEL_VARS, <<"Custom-Channel-Vars">>).
 -define(CCV(Key), [?CHANNEL_VARS, Key]).
 
+-spec should_handle_cdr(kz_term:api_ne_binary()) -> boolean().
+should_handle_cdr(AccountId) when AccountId =:= undefined ->
+    false;
+
+should_handle_cdr(AccountId) ->
+	FormattedAccountIdBinary = kz_util:format_account_db(<<AccountId/binary>>),
+	case kz_datamgr:open_cache_doc(FormattedAccountIdBinary, AccountId) of
+		{error,not_found} -> 'false';
+		{ok, Doc} -> kz_json:get_value(<<"write_cdr">>, Doc, 'false')
+	end.
+
 -spec handle_req(kz_call_event:doc(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, _Props) ->
-    'true' = kapi_call:event_v(JObj),
-    _ = kz_util:put_callid(JObj),
-    Routines = [fun maybe_ignore_app/1
-               ,fun maybe_ignore_loopback/1
-               ],
-    case lists:foldl(fun maybe_ignore_cdr/2, {JObj, []}, Routines) of
-        {_, []} -> handle_req(JObj);
-        {_, List} ->
-            lists:foreach(fun(M) -> lager:debug("~s", [M]) end, List)
-    end.
+	AccountId = kz_call_event:account_id(JObj),
+	case should_handle_cdr(AccountId) of
+    'true' ->
+		'true' = kapi_call:event_v(JObj),
+		_ = kz_util:put_callid(JObj),
+		Routines = [fun maybe_ignore_app/1
+				,fun maybe_ignore_loopback/1
+				],
+		case lists:foldl(fun maybe_ignore_cdr/2, {JObj, []}, Routines) of
+			{_, []} -> handle_req(JObj);
+			{_, List} ->
+				lists:foreach(fun(M) -> lager:debug("~s", [M]) end, List)
+		end;
+	'false'->'ok'
+	end.
 
 -spec maybe_ignore_cdr(fun(), {kz_call_event:doc(), list()}) -> {kz_call_event:doc(), list()}.
 maybe_ignore_cdr(Fun, {JObj, Acc}) ->

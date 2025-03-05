@@ -241,6 +241,14 @@
             },
             "type": "object"
         },
+  	
+	"write_cdr": {
+            "default": false,
+            "description": "Determines if the account is currently set to write kazoo CDRs.",
+            "support_level": "supported",
+            "type": "boolean"
+        },
+
         "zones": {
             "description": "A priority ordered mapping of zones for the account",
             "type": "object"
