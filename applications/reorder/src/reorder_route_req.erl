@@ -13,12 +13,27 @@
 -spec handle_req(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_req(JObj, Props) ->
     AccountId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj),
+    IP =  kz_json:get_value(<<"From-Network-Addr">>, JObj), 
+    lager:debug("HANDLE_REORDER(~s, ~s, ~p, ~p)", [AccountId, IP, JObj, Props]),
     case kz_term:is_empty(AccountId) of
         'false' -> 'ok';
-        'true' ->
-            lager:debug("received route request with no account-id"),
+	'true' ->
+	    lager:debug("HANDLE_REORDER: received route request with no account-id"),
             ControllerQ = props:get_value('queue', Props),
-            maybe_known_number(ControllerQ, JObj)
+            MaybeKnownNumber = maybe_known_number(ControllerQ, JObj),
+	    case MaybeKnownNumber of
+	    {'error', _R} -> 
+		case reg_route_req:lookup_account_by_ip(IP) of
+			{'error', _E} ->
+				handle_no_known_number(ControllerQ, JObj, _R);
+			{'ok', AccountCCVs} ->
+				lager:debug("HANDLE_REORDER: IP FOUND: ~p", [AccountCCVs]),
+				'ok'
+		end;
+	    _ -> 
+		lager:debug("HANDLE_REORDER: Number found ~p", [MaybeKnownNumber]),
+		MaybeKnownNumber
+	    end
     end.
 
 -spec maybe_known_number(kz_term:ne_binary(), kz_json:object()) -> 'ok'.
@@ -27,10 +42,19 @@ maybe_known_number(ControllerQ, JObj) ->
     case knm_number:lookup_account(Number) of
         {'ok', _, _} -> choose_response(ControllerQ, JObj, 'false', <<"known_number">>);
         {'error', _R} ->
-            lager:debug("~s is not associated with any account, ~p", [Number, _R]),
-            Reconcilable = knm_converters:is_reconcilable(Number),
-            choose_response(ControllerQ, JObj, Reconcilable, <<"unknown_number">>)
+	    {'error', _R}
+            %lager:debug("~s is not associated with any account, ~p", [Number, _R]),
+            %Reconcilable = knm_converters:is_reconcilable(Number),
+            %choose_response(ControllerQ, JObj, Reconcilable, <<"unknown_number">>)
     end.
+
+-spec handle_no_known_number(kz_term:ne_binary(), kz_json:object(), char()) -> 'ok'.
+handle_no_known_number(ControllerQ, JObj, Reason) ->
+   Number = get_dest_number(JObj),
+   lager:debug("~s is not associated with any account, ~p", [Number, Reason]),
+   Reconcilable = knm_converters:is_reconcilable(Number),
+   choose_response(ControllerQ, JObj, Reconcilable, <<"unknown_number">>).
+
 
 -spec choose_response(kz_term:ne_binary(), kz_json:object(), boolean(), kz_term:ne_binary()) -> 'ok'.
 choose_response(ControllerQ, JObj, Reconcilable, Type) ->

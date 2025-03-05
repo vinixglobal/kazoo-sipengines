@@ -948,7 +948,7 @@ try_create_endpoint(Routine, Endpoints, Endpoint, Properties, Call) when is_func
             lager:warning("failed to create endpoint: ~p", [_R]),
             Endpoints;
         JObj ->
-            lager:debug("created endpoint ~s", [kz_doc:id(JObj)]),
+            lager:debug("created endpoint ~s: JObj: ~p, Endpoints: ~p", [kz_doc:id(JObj), JObj, Endpoints]),
             [JObj|Endpoints]
     catch
         _E:_R ->
@@ -1164,6 +1164,12 @@ move_privacy('true', 'true', 'true', Clid) ->
              ,hide_number = 'true'
              }.
 
+-spec get_static_ip(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary() | 'undefined'.
+get_static_ip('undefined', 'undefined') -> 'undefined';
+get_static_ip('undefined', IP) -> IP;
+get_static_ip(Forward, 'undefined') -> Forward;
+get_static_ip(_Forward, IP) -> IP.
+
 -spec create_sip_endpoint(kz_json:object(), kz_json:object(), kapps_call:call()) ->
           kz_json:object().
 create_sip_endpoint(Endpoint, Properties, Call) ->
@@ -1181,7 +1187,7 @@ create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
                       ,{<<"To-Username">>, get_to_username(SIPJObj)}
                       ,{<<"To-Realm">>, get_sip_realm(Endpoint, kapps_call:account_id(Call))}
                       ,{<<"To-DID">>, get_to_did(Endpoint, Call)}
-                      ,{<<"To-IP">>, kz_json:get_ne_binary_value(<<"ip">>, SIPJObj)}
+                      ,{<<"To-IP">>, get_static_ip(kz_json:get_ne_binary_value(<<"forward">>, SIPJObj), kz_json:get_ne_binary_value(<<"ip">>, SIPJObj))}
                       ,{<<"SIP-Transport">>, get_sip_transport(SIPJObj)}
                       ,{<<"SIP-Interface">>, get_custom_sip_interface(SIPJObj)}
                       ,{<<"Route">>, kz_json:get_ne_binary_value(<<"route">>, SIPJObj)}
@@ -1216,6 +1222,7 @@ create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
                       ,{<<"Endpoint-Actions">>, endpoint_actions(Endpoint, Call)}
                        | maybe_get_t38(Endpoint, Call)
                       ])),
+    lager:debug("SIP_ENDPOINT: ~p", [SIPEndpoint]),
     maybe_format_endpoint(SIPEndpoint, kz_json:get_json_value(<<"formatters">>, Endpoint)).
 
 -spec maybe_get_t38(kz_json:object(), kapps_call:call()) -> kz_term:proplist().
@@ -1600,12 +1607,14 @@ maybe_add_invite_format(JObj, _Endpoint, _Call, Format) ->
 maybe_add_aor(JObj, Endpoint, Call) ->
     Realm = kzd_devices:sip_realm(Endpoint, kapps_call:account_realm(Call)),
     Username = kzd_devices:sip_username(Endpoint),
-    maybe_add_aor(JObj, Endpoint, Username, Realm).
+    IP = kzd_devices:sip_ip(Endpoint),
+    maybe_add_aor(JObj, Endpoint, Username, Realm, IP).
 
--spec maybe_add_aor(kz_json:object(), kz_json:object(), kz_term:api_binary(), kz_term:ne_binary()) -> kz_json:object().
-maybe_add_aor(JObj, _, 'undefined', _Realm) -> JObj;
-maybe_add_aor(JObj, _, Username, Realm) ->
-    kz_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>> , JObj).
+-spec maybe_add_aor(kz_json:object(), kz_json:object(), kz_term:api_binary(), kz_term:ne_binary(), kz_term:api_binary()) -> kz_json:object().
+maybe_add_aor(JObj, _, 'undefined', _Realm, _IP) -> JObj;
+maybe_add_aor(JObj, _, Username, Realm, 'undefined') ->
+    kz_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>> , JObj);
+maybe_add_aor(JObj, _, _Username, _Realm, _IP) -> JObj.
 
 %%------------------------------------------------------------------------------
 %% @doc This function will return the custom channel vars that should be

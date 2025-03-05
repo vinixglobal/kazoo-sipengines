@@ -357,7 +357,11 @@ get_account_by_realm(RawRealm) ->
                             get_by_ip_errors().
 -spec get_ccvs_by_ip(kz_term:ne_binary()) -> get_by_ip_return().
 get_ccvs_by_ip(IP) ->
-    case kz_cache:peek_local(?KAPPS_GETBY_CACHE, ?ACCT_BY_IP_CACHE(IP)) of
+    Cache1 = kz_cache:peek_local(?KAPPS_GETBY_CACHE, ?ACCT_BY_IP_CACHE(IP)),
+    %Var1 = do_get_ccvs_by_ip(IP),
+    Var1 = placeholder,
+    lager:debug("IP_AUTH get_ccvs_by_ip(~s) : ~p ~p", [IP, Cache1, Var1]),
+    case Cache1 of
         {'error', 'not_found'} -> do_get_ccvs_by_ip(IP);
         {'ok', {'error', _Reason}=E} -> E;
         {'ok', {'ok', _AccountCCVs}=Ok} -> Ok
@@ -365,6 +369,7 @@ get_ccvs_by_ip(IP) ->
 
 -spec do_get_ccvs_by_ip(kz_term:ne_binary()) -> get_by_ip_return().
 do_get_ccvs_by_ip(IP) ->
+    lager:debug("IP_AUTH fired do_get_ccvs_by_ip(~s)", [IP]),
     NotFound = {'error', 'not_found'},
     case kapps_config:get_is_true(<<"registrar">>, <<"use_aggregate">>, 'true')
         andalso kz_datamgr:get_results(?KZ_SIP_DB, ?AGG_LIST_BY_IP, [{'key', IP}])
