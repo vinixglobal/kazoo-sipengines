@@ -763,7 +763,7 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
                                                         ,recording_url=RecordingUrl
                                                         ,agent_call_ids=ACallIds
                                                         }=State) ->
-    lager:debug("member bridged to agent!"),
+    lager:debug("member bridged to agent! ShouldRecord: ~p", [ShouldRecord]),
     maybe_start_recording(Call, ShouldRecord, RecordingUrl),
 
     ACallIds1 = filter_agent_calls(ACallIds, ACallId),
@@ -1224,17 +1224,20 @@ call_id(Call) ->
 -spec maybe_connect_to_agent(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()) ->
           kz_term:proplist().
 maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
+    
     MCallId = kapps_call:call_id(Call),
     kz_util:put_callid(MCallId),
 
     ReqId = kz_binary:rand_hex(6),
     AccountId = kapps_call:account_id(Call),
+    InteractionId = kapps_call:custom_channel_var(<<?CALL_INTERACTION_ID>>, Call),
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, AccountId}
                                   ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
                                   ,{<<"Request-ID">>, ReqId}
                                   ,{<<"Retain-CID">>, <<"true">>}
                                   ,{<<"Agent-ID">>, AgentId}
+                                  ,{<<"Call-Interaction-ID">>, InteractionId}
                                   ,{<<"Member-Call-ID">>, MCallId}
                                   ]),
 
@@ -1349,7 +1352,7 @@ maybe_originate_callback(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, Details) ->
 outbound_call_id(CallId, AgentId) when is_binary(CallId) ->
     Hash = kz_term:to_hex_binary(erlang:md5(CallId)),
     Rnd = kz_binary:rand_hex(4),
-    <<Hash/binary, "-", AgentId/binary, "-", Rnd/binary>>;
+    <<<<"recipient_">>/binary, Hash/binary, "-", AgentId/binary, "-", Rnd/binary>>;
 outbound_call_id(Call, AgentId) ->
     outbound_call_id(kapps_call:call_id(Call), AgentId).
 
