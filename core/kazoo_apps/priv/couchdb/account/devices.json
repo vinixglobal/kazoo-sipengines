@@ -21,9 +21,11 @@
                 "    'owner_id': doc.owner_id,",
                 "    'enabled': doc.enabled,",
                 "    'device_type': doc.device_type || 'sip_device',",
+                "    'sub_type': doc.sub_type || undefined,",
                 "    'mobile': doc.mobile,",
                 "    'call_recording': doc.call_recording,",
-                "    'flags': doc.flags || []",
+                "    'flags': doc.flags || [],",
+                "    'template': (doc.sub_type == 'device_template') ? ((doc.provision) ? { endpoint_brand: doc.provision.endpoint_brand, endpoint_model: doc.provision.endpoint_model, isDefaultTemplate: (doc.provision.isDefaultTemplate || false) } : null ) : undefined",
                 "  });",
                 "}"
             ]
