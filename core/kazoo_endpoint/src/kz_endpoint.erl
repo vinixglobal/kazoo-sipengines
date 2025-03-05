@@ -1192,7 +1192,7 @@ create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
                       ,{<<"SIP-Interface">>, get_custom_sip_interface(SIPJObj)}
                       ,{<<"Route">>, kz_json:get_ne_binary_value(<<"route">>, SIPJObj)}
                       ,{<<"Proxy-IP">>, kz_json:get_ne_binary_value(<<"proxy">>, SIPJObj)}
-                      ,{<<"Forward-IP">>, kz_json:get_ne_binary_value(<<"forward">>, SIPJObj)}
+                      ,{<<"Forward-IP">>, kz_json:get_ne_binary_value(<<"call_forward">>, SIPJObj)}
                       ,{<<"Caller-ID-Name">>, Clid#clid.caller_name}
                       ,{<<"Caller-ID-Number">>, Clid#clid.caller_number}
                       ,{<<"Outbound-Caller-ID-Number">>, Clid#clid.caller_number}
@@ -1607,7 +1607,8 @@ maybe_add_invite_format(JObj, _Endpoint, _Call, Format) ->
 maybe_add_aor(JObj, Endpoint, Call) ->
     Realm = kzd_devices:sip_realm(Endpoint, kapps_call:account_realm(Call)),
     Username = kzd_devices:sip_username(Endpoint),
-    IP = kzd_devices:sip_ip(Endpoint),
+    IP = maybe_get_device_ip(kzd_devices:sip_ip(Endpoint), kzd_devices:sip_forward(Endpoint)),
+	lager:debug("MAYBE_GET_DEVICE_IP(~p, ~p)", [kzd_devices:sip_ip(Endpoint), kzd_devices:sip_forward(Endpoint)]),
     maybe_add_aor(JObj, Endpoint, Username, Realm, IP).
 
 -spec maybe_add_aor(kz_json:object(), kz_json:object(), kz_term:api_binary(), kz_term:ne_binary(), kz_term:api_binary()) -> kz_json:object().
@@ -1615,6 +1616,11 @@ maybe_add_aor(JObj, _, 'undefined', _Realm, _IP) -> JObj;
 maybe_add_aor(JObj, _, Username, Realm, 'undefined') ->
     kz_json:set_value(<<"X-KAZOO-AOR">>, <<"sip:", Username/binary, "@", Realm/binary>> , JObj);
 maybe_add_aor(JObj, _, _Username, _Realm, _IP) -> JObj.
+
+-spec maybe_get_device_ip(kz_term:api_binary(), kz_term:api_binary()) -> binary() | 'undefined'.
+maybe_get_device_ip('undefined', IP) -> IP;
+maybe_get_device_ip(IP, 'undefined') -> IP;
+maybe_get_device_ip('undefined', 'undefined') -> 'undefined'.
 
 %%------------------------------------------------------------------------------
 %% @doc This function will return the custom channel vars that should be

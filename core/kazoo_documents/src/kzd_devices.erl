@@ -64,6 +64,7 @@
 -export([sip_ignore_completed_elsewhere/1, sip_ignore_completed_elsewhere/2, set_sip_ignore_completed_elsewhere/2]).
 -export([sip_invite_format/1, sip_invite_format/2, set_sip_invite_format/2]).
 -export([sip_ip/1, sip_ip/2, set_sip_ip/2]).
+-export([sip_forward/1, sip_forward/2, set_sip_forward/2]).
 -export([sip_method/1, sip_method/2, set_sip_method/2]).
 -export([sip_number/1, sip_number/2, set_sip_number/2]).
 -export([sip_password/1, sip_password/2, set_sip_password/2]).
@@ -855,6 +856,20 @@ sip_ip(Doc, Default) ->
 -spec set_sip_ip(doc(), binary()) -> doc().
 set_sip_ip(Doc, SipIP) ->
     kz_json:set_value([<<"sip">>, <<"ip">>], SipIP, Doc).
+
+
+-spec sip_forward(doc()) -> kz_term:api_binary().
+sip_forward(Doc) ->
+    sip_forward(Doc, 'undefined').
+
+-spec sip_forward(doc(), Default) -> binary() | Default.
+sip_forward(Doc, Default) ->
+    kz_json:get_ne_binary_value([<<"sip">>, <<"forward">>], Doc, Default).
+
+-spec set_sip_forward(doc(), binary()) -> doc().
+set_sip_forward(Doc, SipIP) ->
+    kz_json:set_value([<<"sip">>, <<"forward">>], SipIP, Doc).
+
 
 -spec sip_method(doc()) -> binary().
 sip_method(Doc) ->
