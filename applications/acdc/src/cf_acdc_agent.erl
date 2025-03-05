@@ -45,9 +45,12 @@ handle(Data, Call) ->
             {'ok', AgentId} ->
                 Status = find_agent_status(Call, AgentId),
                 NewStatus = fix_data_status(kz_json:get_value(<<"action">>, Data)),
-                lager:info("agent ~s maybe changing status from ~s to ~s", [AgentId, Status, NewStatus]),
+				
+				NewToggleAction = fix_toggle_action(NewStatus, Status),
 
-                maybe_update_status(Call, AgentId, Status, NewStatus, Data);
+                lager:info("agent ~s maybe changing status from ~s to ~s", [AgentId, Status, NewToggleAction]),
+
+                maybe_update_status(Call, AgentId, Status, NewToggleAction, Data);
             {'error', 'multiple_owners'} ->
                 lager:info("too many owners of device ~s, not logging in", [kapps_call:authorizing_id(Call)]),
                 play_agent_invalid(Call)
@@ -71,6 +74,10 @@ fix_agent_status({'ok', Status}) -> Status.
 
 fix_data_status(<<"pause">>) -> <<"paused">>;
 fix_data_status(Status) -> Status.
+
+fix_toggle_action(<<"toggle">>,<<"logged_out">>) -> <<"login">>;
+fix_toggle_action(<<"toggle">>, _) -> <<"logout">>;
+fix_toggle_action(NewStatus, _) -> NewStatus.
 
 maybe_update_status(Call, AgentId, _Curr, <<"logout">>, Data) ->
     lager:info("agent ~s wants to log out (currently: ~s)", [AgentId, _Curr]),
