@@ -55,7 +55,7 @@
 
 -define(ORIGINATE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 2).
 -define(NEGOTIATE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 2).
--define(PAGE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 5).
+%%-define(PAGE_TIMEOUT, ?MILLISECONDS_IN_MINUTE * 5).
 
 -define(BINDINGS(CallId), [{'self', []}
                           ,{'fax', [{'restrict_to', ['query_status']}]}
@@ -82,6 +82,7 @@
 
 -define(DEFAULT_RETRY_PERIOD, kapps_config:get_integer(?CONFIG_CAT, <<"default_retry_period">>, 300)).
 -define(DEFAULT_RETRY_COUNT, kapps_config:get_integer(?CONFIG_CAT, <<"default_retry_count">>, 3)).
+-define(PAGE_TIMEOUT, ?MILLISECONDS_IN_SECOND * kapps_config:get_integer(?CONFIG_CAT, <<"page_timeout_seconds">>, 420)).
 -define(DEFAULT_COMPARE_FIELD, kapps_config:get_binary(?CONFIG_CAT, <<"default_compare_field">>, <<"result_cause">>)).
 
 -define(CALLFLOW_LIST, <<"callflows/listing_by_number">>).
