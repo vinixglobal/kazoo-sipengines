@@ -28,6 +28,7 @@
                 "    created: doc.pvt_created,",
                 "    updated: doc.pvt_modified,",
                 "    locality: doc.pvt_locality",
+                "    extended_attributes: doc.extended_attributes || {}",
                 "  });",
                 "}"
             ]
