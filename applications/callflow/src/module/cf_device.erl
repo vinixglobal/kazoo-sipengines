@@ -51,6 +51,9 @@ maybe_handle_bridge_failure(Reason, Call) ->
 bridge_to_endpoints(Data, Call) ->
     EndpointId = kz_json:get_ne_binary_value(<<"id">>, Data),
     Params = kz_json:set_value(<<"source">>, kz_term:to_binary(?MODULE), Data),
+	%%lager:debug("BRIDGE_TO_ENDPOINTS PARAMS: ~p", [Params]),
+	%%lager:debug("BRIDGE_TO_ENDPOINTS DATA: ~p", [Data]),
+	%%lager:debug("BRIDGE_TO_ENDPOINTS CALL: ~p", [Call]),
     Strategy = kz_json:get_ne_binary_value(<<"dial_strategy">>, Data, <<"simultaneous">>),
     case kz_endpoint:build(EndpointId, Params, Call) of
         {'error', _}=E -> E;

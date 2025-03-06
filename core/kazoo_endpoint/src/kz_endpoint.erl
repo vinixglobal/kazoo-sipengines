@@ -16,6 +16,7 @@
         ,maybe_start_metaflow/2
         ,encryption_method_map/2
         ,get_sip_realm/2, get_sip_realm/3
+		,maybe_add_callflow_sip_headers/2
         ]).
 
 -ifdef(TEST).
@@ -1170,16 +1171,34 @@ get_static_ip('undefined', IP) -> IP;
 get_static_ip(Forward, 'undefined') -> Forward;
 get_static_ip(_Forward, IP) -> IP.
 
+-spec maybe_add_callflow_sip_headers(kz_json:object(), kz_json:object()) -> kz_json:object().
+maybe_add_callflow_sip_headers('undefined', 'undefined') -> undefined;
+maybe_add_callflow_sip_headers('undefined', Callflow) -> Callflow;
+maybe_add_callflow_sip_headers(Original, 'undefined') -> Original;
+maybe_add_callflow_sip_headers(Original, Callflow) -> 
+	case { kz_json:is_valid_json_object(Original), kz_json:is_valid_json_object(Callflow) } of
+		{true, true} -> kz_json:merge(Original, Callflow);
+		{false, true} -> Callflow;
+		{false, false} -> Original
+	end.
+
+
 -spec create_sip_endpoint(kz_json:object(), kz_json:object(), kapps_call:call()) ->
           kz_json:object().
 create_sip_endpoint(Endpoint, Properties, Call) ->
-    Clid = get_clid(Endpoint, Properties, Call),
-    create_sip_endpoint(Endpoint, Properties, Clid, Call).
+	Endpoint1 = case kz_json:is_valid_json_object(kz_json:get_ne_json_value(<<"endpoint_overrides">>, Properties, 'undefined')) of 
+		'true' -> kz_json:merge(Endpoint, kz_json:get_ne_json_value(<<"endpoint_overrides">>, Properties));
+		_ -> Endpoint
+	end,
+
+	lager:debug("MERGED ENDPOINT: ~p", [Endpoint1]),
+    Clid = get_clid(Endpoint1, Properties, Call),
+    create_sip_endpoint(Endpoint1, Properties, Clid, Call).
 
 -spec create_sip_endpoint(kz_json:object(), kz_json:object(), clid(), kapps_call:call()) ->
           kz_json:object().
 create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
-    SIPJObj = kz_json:get_json_value(<<"sip">>, Endpoint),
+	SIPJObj = kz_json:get_json_value(<<"sip">>, Endpoint),
     SIPEndpoint = kz_json:from_list(
                     props:filter_empty(
                       [{<<"Invite-Format">>, get_invite_format(SIPJObj)}
@@ -1213,7 +1232,7 @@ create_sip_endpoint(Endpoint, Properties, #clid{}=Clid, Call) ->
                       ,{<<"Codecs">>, get_codecs(Endpoint)}
                       ,{<<"Hold-Media">>, kz_attributes:moh_attributes(Endpoint, <<"media_id">>, Call)}
                       ,{<<"Presence-ID">>, kz_attributes:presence_id(Endpoint, Call)}
-                      ,{<<"Custom-SIP-Headers">>, generate_sip_headers(Endpoint, <<"sip">>, Call)}
+                      ,{<<"Custom-SIP-Headers">>, maybe_add_callflow_sip_headers(generate_sip_headers(Endpoint, <<"sip">>, Call), kz_json:get_ne_json_value(<<"custom_sip_headers">>, Properties, 'undefined'))}
                       ,{<<"Custom-Channel-Vars">>, generate_ccvs(Endpoint, Call)}
                       ,{<<"Flags">>, get_outbound_flags(Endpoint)}
                       ,{<<"Ignore-Completed-Elsewhere">>, get_ignore_completed_elsewhere(Endpoint)}

@@ -34,7 +34,7 @@
 
         ,error_to_binary/1
         ]).
--export([is_true/1, is_false/1
+-export([is_true/1, is_true/2, is_false/1, is_false/2
         ,is_boolean/1
         ,is_ne_binary/1, is_api_ne_binary/1
         ,is_ne_binaries/1
@@ -396,6 +396,12 @@ is_true("true") -> 'true';
 is_true('true') -> 'true';
 is_true(_) -> 'false'.
 
+-spec is_true(binary() | string() | atom(), term()) -> boolean().
+is_true(<<"true">>, _) -> 'true';
+is_true("true", _) -> 'true';
+is_true('true', _) -> 'true';
+is_true(_, Default) -> Default.
+
 -type caster() :: fun((any()) -> any()).
 -spec safe_cast(any(), any(), caster()) -> any().
 safe_cast(Value, Default, CastFun) ->
@@ -412,6 +418,12 @@ is_false(<<"false">>) -> 'true';
 is_false("false") -> 'true';
 is_false('false') -> 'true';
 is_false(_) -> 'false'.
+
+-spec is_false(binary() | string() | atom(), term()) -> boolean().
+is_false(<<"false">>, _) -> 'true';
+is_false("false", _) -> 'true';
+is_false('false', _) -> 'true';
+is_false(_, Default) -> Default.
 
 -spec always_false(any()) -> 'false'.
 always_false(_) -> 'false'.
