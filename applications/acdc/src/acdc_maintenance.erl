@@ -23,7 +23,8 @@
         ,flush_call_stat/1
         ,queues_summary/0, queues_summary/1, queue_summary/2
         ,queues_detail/0, queues_detail/1, queue_detail/2
-        ,queues_restart/1, queue_restart/2
+        ,queues_restart/1, queue_restart/2, queue_stop/2
+        ,maybe_start_queue/2
 
         ,agents_summary/0, agents_summary/1, agent_summary/2
         ,agents_detail/0, agents_detail/1, agent_detail/2
@@ -401,6 +402,23 @@ queue_detail(AccountId, QueueId) ->
         Pid -> acdc_queue_sup:status(Pid)
     end.
 
+-spec queue_stop(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+queue_stop(AccountId, QueueId) ->
+    kz_util:put_callid(?MODULE),
+    case acdc_queues_sup:find_queue_supervisor(AccountId, QueueId) of
+        'undefined' ->
+            lager:info("queue ~s in account ~s not running", [QueueId, AccountId]);
+        Pid ->
+            case supervisor:terminate_child('acdc_queues_sup', Pid) of
+                'ok' ->
+                    lager:info("stopped queue supervisor ~p", [Pid]);
+                {'error', 'not_found'} ->
+                    lager:info("queue supervisor ~p not found", [Pid]);
+                {'error', _E} ->
+                    lager:info("failed to terminate queue supervisor ~p: ~p", [_E])
+            end
+    end.
+
 -spec queues_restart(kz_term:ne_binary()) -> 'ok'.
 queues_restart(AccountId) ->
     kz_util:put_callid(?MODULE),
@@ -438,6 +456,7 @@ maybe_stop_then_start_queue(AccountId, QueueId, Pid) ->
             lager:info("failed to terminate queue supervisor ~p: ~p", [_E])
     end.
 
+-spec maybe_start_queue(kz_term:ne_binary(), pid()) -> 'ok'.
 maybe_start_queue(AccountId, QueueId) ->
     case acdc_queues_sup:new(AccountId, QueueId) of
         {'ok', 'undefined'} ->

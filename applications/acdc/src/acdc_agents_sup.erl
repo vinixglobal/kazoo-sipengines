@@ -29,6 +29,7 @@
         ,agents_running/0
         ,restart_acct/1
         ,restart_agent/2
+        ,is_account_allowed/1
         ]).
 
 %% Supervisor callbacks
@@ -179,8 +180,31 @@ init([]) ->
 start_agent(AccountId, AgentId, AgentJObj) ->
     start_agent(AccountId, AgentId, AgentJObj, []).
 
+%%-spec start_agent(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), [any()]) -> kz_types:sup_startchild_ret().
+%%start_agent(AccountId, AgentId, AgentJObj, ExtraArgs) ->
+%%    Id = ?CHILD_ID(AccountId, AgentId),
+%%    case supervisor:start_child(?SERVER, ?CHILD(Id, [AccountId, AgentId, AgentJObj] ++ ExtraArgs)) of
+%%        {'error', 'already_present'}=E ->
+%%            lager:debug("agent ~s(~s) already present", [AgentId, AccountId]),
+%%            E;
+%%        {'error', {'already_started', Pid}}=E ->
+%%            lager:debug("agent ~s(~s) already started here: ~p", [AgentId, AccountId, Pid]),
+%%            E;
+%%        StartChildRet -> StartChildRet
+%%    end.
+
 -spec start_agent(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), [any()]) -> kz_types:sup_startchild_ret().
 start_agent(AccountId, AgentId, AgentJObj, ExtraArgs) ->
+    case is_account_allowed(AccountId) of
+        'true' ->
+            do_start_agent(AccountId, AgentId, AgentJObj, ExtraArgs);
+        'false' ->
+            lager:warning("account ~s not allowed on node ~s", [AccountId, node()]),
+            {'error', 'account_not_allowed_on_node'}
+    end.
+
+-spec do_start_agent(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), [any()]) -> kz_types:sup_startchild_ret().
+do_start_agent(AccountId, AgentId, AgentJObj, ExtraArgs) ->
     Id = ?CHILD_ID(AccountId, AgentId),
     case supervisor:start_child(?SERVER, ?CHILD(Id, [AccountId, AgentId, AgentJObj] ++ ExtraArgs)) of
         {'error', 'already_present'}=E ->
@@ -190,4 +214,30 @@ start_agent(AccountId, AgentId, AgentJObj, ExtraArgs) ->
             lager:debug("agent ~s(~s) already started here: ~p", [AgentId, AccountId, Pid]),
             E;
         StartChildRet -> StartChildRet
+    end.
+
+-spec is_account_allowed(kz_term:ne_binary()) -> boolean().
+is_account_allowed(AccountId) ->
+    Node = kz_term:to_binary(node()),
+    case kz_datamgr:open_cache_doc(?KZ_ACDC_DB, <<"nodes_accounts">>) of
+        {'ok', JObj} ->
+            case kz_json:get_value([<<"nodes">>, Node, <<"accounts">>], JObj) of
+                'undefined' ->
+                    check_default_accounts(JObj, AccountId);
+                Accounts when is_list(Accounts) ->
+                    lists:member(AccountId, Accounts)
+            end;
+        {'error', _E} ->
+            lager:error("failed to fetch nodes_accounts doc: ~p", [_E]),
+            'false'
+    end.
+
+-spec check_default_accounts(kz_json:object(), kz_term:ne_binary()) -> boolean().
+check_default_accounts(JObj, AccountId) ->
+    case kz_json:get_value([<<"default">>, <<"accounts">>], JObj) of
+        'undefined' -> 
+            lager:debug("no default accounts configured"),
+            'false';
+        Accounts when is_list(Accounts) ->
+            lists:member(AccountId, Accounts)
     end.

@@ -112,18 +112,36 @@ handle_queue_change(_, AccountId, QueueId, ?DOC_CREATED) ->
         'undefined' -> acdc_queues_sup:new(AccountId, QueueId);
         P when is_pid(P) -> 'ok'
     end;
+%%handle_queue_change(AccountDb, AccountId, QueueId, ?DOC_EDITED) ->
+%%    lager:debug("maybe updating existing queue for ~s: ~s", [AccountId, QueueId]),
+%%    case acdc_queues_sup:find_queue_supervisor(AccountId, QueueId) of
+%%        'undefined' -> acdc_queues_sup:new(AccountId, QueueId);
+%%        QueueSup when is_pid(QueueSup) ->
+%%            {'ok', JObj} = kz_datamgr:open_doc(AccountDb, QueueId),
+%%            WorkersSup = acdc_queue_sup:workers_sup(QueueSup),
+%%            WorkersSups = acdc_queue_workers_sup:workers(WorkersSup),
+%%            Refresher = fun (Sup) -> acdc_queue_fsm:refresh(acdc_queue_worker_sup:fsm(Sup), JObj) end,
+%%            lists:foreach(Refresher, WorkersSups),
+%%            Mgr = acdc_queue_sup:manager(QueueSup),
+%%            acdc_queue_manager:refresh(Mgr, JObj)
+%%    end;
 handle_queue_change(AccountDb, AccountId, QueueId, ?DOC_EDITED) ->
     lager:debug("maybe updating existing queue for ~s: ~s", [AccountId, QueueId]),
-    case acdc_queues_sup:find_queue_supervisor(AccountId, QueueId) of
-        'undefined' -> acdc_queues_sup:new(AccountId, QueueId);
-        QueueSup when is_pid(QueueSup) ->
-            {'ok', JObj} = kz_datamgr:open_doc(AccountDb, QueueId),
-            WorkersSup = acdc_queue_sup:workers_sup(QueueSup),
-            WorkersSups = acdc_queue_workers_sup:workers(WorkersSup),
-            Refresher = fun (Sup) -> acdc_queue_fsm:refresh(acdc_queue_worker_sup:fsm(Sup), JObj) end,
-            lists:foreach(Refresher, WorkersSups),
-            Mgr = acdc_queue_sup:manager(QueueSup),
-            acdc_queue_manager:refresh(Mgr, JObj)
+    case acdc_queues_sup:is_account_allowed(AccountId) of
+        'false' ->
+            lager:debug("account ~s not allowed on this node", [AccountId]);
+        'true' ->
+            case acdc_queues_sup:find_queue_supervisor(AccountId, QueueId) of
+                'undefined' -> acdc_queues_sup:new(AccountId, QueueId);
+                QueueSup when is_pid(QueueSup) ->
+                    {'ok', JObj} = kz_datamgr:open_doc(AccountDb, QueueId),
+                    WorkersSup = acdc_queue_sup:workers_sup(QueueSup),
+                    WorkersSups = acdc_queue_workers_sup:workers(WorkersSup),
+                    Refresher = fun (Sup) -> acdc_queue_fsm:refresh(acdc_queue_worker_sup:fsm(Sup), JObj) end,
+                    lists:foreach(Refresher, WorkersSups),
+                    Mgr = acdc_queue_sup:manager(QueueSup),
+                    acdc_queue_manager:refresh(Mgr, JObj)
+            end
     end;
 handle_queue_change(_, AccountId, QueueId, ?DOC_DELETED) ->
     lager:debug("maybe stopping existing queue for ~s: ~s", [AccountId, QueueId]),

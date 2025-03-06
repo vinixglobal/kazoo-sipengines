@@ -19,6 +19,7 @@
         ,init_acct/1
         ,init_acct_queues/1
         ,init_acct_agents/1
+        ,get_acdc_accounts_for_node/0
         ]).
 
 -include("acdc.hrl").
@@ -31,20 +32,80 @@ start_link() ->
     _ = kz_util:spawn(fun init_acdc/0, []),
     'ignore'.
 
+%%-spec init_acdc() -> any().
+%%init_acdc() ->
+    %%kz_util:put_callid(?MODULE),
+    %%case kz_datamgr:get_all_results(?KZ_ACDC_DB, <<"acdc/accounts_listing">>) of
+     %%   {'ok', []} ->
+     %%       lager:debug("no accounts configured for acdc");
+    %%    {'ok', Accounts} ->
+    %%        [init_acct(kz_json:get_value(<<"key">>, Account)) || Account <- Accounts];
+    %%    {'error', 'not_found'} ->
+    %%        lager:debug("acdc db not found, initializing"),
+    %%        _ = init_db(),
+    %%        lager:debug("consider running acdc_maintenance:migrate() to enable acdc for already-configured accounts");
+    %%    {'error', _E} ->
+    %%        lager:debug("failed to query acdc db: ~p", [_E])
+    %%end.
+
 -spec init_acdc() -> any().
 init_acdc() ->
     kz_util:put_callid(?MODULE),
-    case kz_datamgr:get_all_results(?KZ_ACDC_DB, <<"acdc/accounts_listing">>) of
-        {'ok', []} ->
-            lager:debug("no accounts configured for acdc");
+    case get_acdc_accounts_for_node() of
         {'ok', Accounts} ->
-            [init_acct(kz_json:get_value(<<"key">>, Account)) || Account <- Accounts];
+            [init_acct(AccountId) || AccountId <- Accounts];
+        {'error', 'no_node_config'} ->
+            init_acdc_from_accounts_listing();
         {'error', 'not_found'} ->
             lager:debug("acdc db not found, initializing"),
             _ = init_db(),
             lager:debug("consider running acdc_maintenance:migrate() to enable acdc for already-configured accounts");
         {'error', _E} ->
-            lager:debug("failed to query acdc db: ~p", [_E])
+            lager:debug("failed to query acdc db: ~p", [_E]),
+            init_acdc_from_accounts_listing()
+    end.
+
+-spec init_acdc_from_accounts_listing() -> any().
+init_acdc_from_accounts_listing() ->
+    case kz_datamgr:get_all_results(?KZ_ACDC_DB, <<"acdc/accounts_listing">>) of
+        {'ok', []} ->
+            lager:debug("no accounts configured for acdc");
+        {'ok', Accounts} ->
+            [init_acct(kz_json:get_value(<<"key">>, Account)) || Account <- Accounts];
+        {'error', _E} ->
+            lager:debug("failed to query accounts listing: ~p", [_E])
+    end.
+
+-spec get_acdc_accounts_for_node() -> {'ok', kz_term:ne_binaries()} | {'error', any()}.
+get_acdc_accounts_for_node() ->
+    Node = kz_term:to_binary(node()),
+    case kz_datamgr:open_cache_doc(?KZ_ACDC_DB, <<"nodes_accounts">>) of
+        {'ok', JObj} ->
+            case kz_json:get_value([<<"nodes">>, Node, <<"accounts">>], JObj) of
+                'undefined' ->
+                    lager:debug("no node-specific accounts configured for ~s", [Node]),
+                    get_default_accounts(JObj);
+                Accounts when is_list(Accounts) ->
+                    lager:debug("found node-specific accounts for ~s: ~p", [Node, Accounts]),
+                    {'ok', Accounts}
+            end;
+        {'error', 'not_found'} ->
+            lager:debug("nodes_accounts document not found, falling back to accounts listing"),
+            {'error', 'no_node_config'};
+        {'error', _E}=Error -> 
+            lager:error("failed to fetch nodes_accounts doc: ~p", [_E]),
+            Error
+    end.
+
+-spec get_default_accounts(kz_json:object()) -> {'ok', kz_term:ne_binaries()}.
+get_default_accounts(JObj) ->
+    case kz_json:get_value([<<"default">>, <<"accounts">>], JObj) of
+        'undefined' -> 
+            lager:debug("no default accounts configured"),
+            {'ok', []};
+        Accounts when is_list(Accounts) ->
+            lager:debug("using default accounts configuration"),
+            {'ok', Accounts}
     end.
 
 -spec init_db() -> any().
