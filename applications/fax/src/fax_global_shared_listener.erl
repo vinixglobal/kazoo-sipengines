@@ -36,7 +36,7 @@
                      }
                     ]).
 
--define(BINDINGS, [{'fax', [{'restrict_to', ['start']}, 'federate']}
+-define(BINDINGS, [{'fax', [{'restrict_to', ['start']}]}
                   ]).
 -define(QUEUE_NAME, <<"fax_global_shared_listener">>).
 -define(QUEUE_OPTIONS, [{'exclusive', 'false'}
