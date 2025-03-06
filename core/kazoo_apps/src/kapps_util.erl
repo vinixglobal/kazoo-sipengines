@@ -25,6 +25,7 @@
 -export([get_account_by_realm/1
         ,get_ccvs_by_ip/1
         ,get_accounts_by_name/1
+        ,do_get_ccvs_by_ip/1
 
         ,are_all_enabled/1
         ]).
@@ -364,6 +365,7 @@ get_ccvs_by_ip(IP) ->
     case Cache1 of
         {'error', 'not_found'} -> do_get_ccvs_by_ip(IP);
         {'ok', {'error', _Reason}=E} -> E;
+        %%{'ok', {'error', _Reason}=E} -> do_get_ccvs_by_ip(IP);
         {'ok', {'ok', _AccountCCVs}=Ok} -> Ok
     end.
 
