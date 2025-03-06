@@ -987,8 +987,11 @@ create_new_message_document(Context, BoxJObj) ->
             ,{<<"Timezone">>, kzd_voicemail_box:timezone(BoxJObj)}
             ,{<<"Box-Id">>, kz_doc:id(BoxJObj)}
             ],
-    JObj = kzd_box_message:new(AccountId, Props),
-    MsgId = kz_doc:id(JObj),
+    JObjTmp = kzd_box_message:new(AccountId, Props),
+    %%MsgId = kz_doc:id(JObj),
+    MsgId = kz_json:get_ne_binary_value(<<"id">>, Doc, kz_doc:id(JObjTmp)),
+
+    JObj = kz_json:set_value(<<"_id">>, MsgId, JObjTmp),
 
     AccountRealm = case kzd_accounts:fetch_realm(AccountId) of 'undefined' -> <<"nodomain">>; R -> R end,
     DefaultCID = kz_privacy:anonymous_caller_id_number(AccountId),
@@ -1001,8 +1004,8 @@ create_new_message_document(Context, BoxJObj) ->
 
     Timestamp = kz_doc:created(JObj),
 
-    Routines = [{fun kapps_call:set_to/2, <<To/binary, "@", AccountRealm/binary>>}
-               ,{fun kapps_call:set_from/2, <<From/binary, "@", AccountRealm/binary>>}
+    Routines = [{fun kapps_call:set_to/2, append_if_no_at(To, AccountRealm)}
+               ,{fun kapps_call:set_from/2, append_if_no_at(From, AccountRealm)}
                ,{fun kapps_call:set_call_id/2, kz_json:get_ne_binary_value(<<"call_id">>, Doc, kz_binary:rand_hex(12))}
                ,{fun kapps_call:set_caller_id_number/2, CallerNumber}
                ,{fun kapps_call:set_caller_id_name/2, CallerName}
@@ -1011,7 +1014,28 @@ create_new_message_document(Context, BoxJObj) ->
     Metadata = kzd_box_message:build_metadata_object(Length, Call, MsgId, CallerNumber, CallerName, Timestamp, Folder),
 
     Message = kzd_box_message:update_media_id(MsgId, kzd_box_message:set_metadata(Metadata, JObj)),
+    Modb = kz_http_util:urldecode(kazoo_modb:get_modb(AccountId, kz_term:to_integer(Timestamp))),
+    lager:debug("Checking for modb ~p", [Modb]),
+    maybe_create_modb(Modb),
     cb_context:set_doc(cb_context:set_account_db(Context, kz_doc:account_db(Message)), Message).
+
+-spec append_if_no_at(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
+append_if_no_at(Binary, AppendBinary) ->
+    case binary:match(Binary, <<"@">>) of
+        nomatch -> Binary ++ AppendBinary; % If "@"" already exists, return the original binary
+        _ -> Binary            % If "@"" doesn't exist, append the second binary
+    end.
+
+-spec maybe_create_modb(kz_term:ne_binary()) -> 'undefined'.
+maybe_create_modb(AccountMODb) ->
+    EncodedMODb = kz_util:format_account_modb(AccountMODb, 'encoded'),
+    IsDbExists = kz_datamgr:db_exists_all(EncodedMODb),
+    case IsDbExists of
+        false -> kazoo_modb:create(AccountMODb),
+        undefined;
+        _ -> undefined
+    end.
+    
 
 %%------------------------------------------------------------------------------
 %% @doc Get message binary content so it can be downloaded
