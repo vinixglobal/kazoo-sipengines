@@ -43,13 +43,50 @@
 start_link() ->
     supervisor:start_link({'local', ?SERVER}, ?MODULE, []).
 
--spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:startlink_ret().
+%%-spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:startlink_ret().
+%%new(AccountId, QueueId) ->
+%%    case find_queue_supervisor(AccountId, QueueId) of
+%%        P when is_pid(P) -> {'ok', P};
+%%        'undefined' -> supervisor:start_child(?SERVER, [AccountId, QueueId])
+%%    end.
+-spec new(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_types:sup_startchild_ret().
 new(AccountId, QueueId) ->
-    case find_queue_supervisor(AccountId, QueueId) of
-        P when is_pid(P) -> {'ok', P};
-        'undefined' -> supervisor:start_child(?SERVER, [AccountId, QueueId])
+    case is_account_allowed(AccountId) of
+        'true' ->
+            case find_queue_supervisor(AccountId, QueueId) of
+                P when is_pid(P) -> {'ok', P};
+                'undefined' -> supervisor:start_child(?SERVER, [AccountId, QueueId])
+            end;
+        'false' ->
+            lager:warning("account ~s not allowed on node ~s", [AccountId, node()]),
+            {'error', 'account_not_allowed_on_node'}
     end.
 
+-spec is_account_allowed(kz_term:ne_binary()) -> boolean().
+is_account_allowed(AccountId) ->
+    Node = kz_term:to_binary(node()),
+    case kapps_config:get_category(<<"acdc">>) of
+        {'ok', JObj} ->
+            case kz_json:get_value([<<"nodes">>, Node, <<"accounts">>], JObj) of
+                'undefined' ->
+                    check_default_accounts(JObj, AccountId);
+                Accounts when is_list(Accounts) ->
+                    lists:member(AccountId, Accounts)
+            end;
+        {'error', _E} ->
+            lager:error("failed to fetch nodes_accounts doc: ~p", [_E]),
+            'false'
+    end.
+
+-spec check_default_accounts(kz_json:object(), kz_term:ne_binary()) -> boolean().
+check_default_accounts(JObj, AccountId) ->
+    case kz_json:get_value([<<"nodes">>, <<"default">>, <<"accounts">>], JObj) of
+        'undefined' -> 
+            lager:debug("no default accounts configured"),
+            'false';
+        Accounts when is_list(Accounts) ->
+            lists:member(AccountId, Accounts)
+    end.
 -spec workers() -> kz_term:pids().
 workers() ->
     [Pid || {_, Pid, 'supervisor', _} <- supervisor:which_children(?SERVER), is_pid(Pid)].

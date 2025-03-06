@@ -79,7 +79,7 @@ init_acdc_from_accounts_listing() ->
 -spec get_acdc_accounts_for_node() -> {'ok', kz_term:ne_binaries()} | {'error', any()}.
 get_acdc_accounts_for_node() ->
     Node = kz_term:to_binary(node()),
-    case kz_datamgr:open_cache_doc(?KZ_ACDC_DB, <<"nodes_accounts">>) of
+    case kapps_config:get_category(<<"acdc">>) of
         {'ok', JObj} ->
             case kz_json:get_value([<<"nodes">>, Node, <<"accounts">>], JObj) of
                 'undefined' ->
@@ -99,7 +99,7 @@ get_acdc_accounts_for_node() ->
 
 -spec get_default_accounts(kz_json:object()) -> {'ok', kz_term:ne_binaries()}.
 get_default_accounts(JObj) ->
-    case kz_json:get_value([<<"default">>, <<"accounts">>], JObj) of
+   case kz_json:get_value([<<"nodes">>, <<"default">>, <<"accounts">>], JObj) of
         'undefined' -> 
             lager:debug("no default accounts configured"),
             {'ok', []};

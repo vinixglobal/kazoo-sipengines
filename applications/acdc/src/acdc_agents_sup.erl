@@ -219,7 +219,7 @@ do_start_agent(AccountId, AgentId, AgentJObj, ExtraArgs) ->
 -spec is_account_allowed(kz_term:ne_binary()) -> boolean().
 is_account_allowed(AccountId) ->
     Node = kz_term:to_binary(node()),
-    case kz_datamgr:open_cache_doc(?KZ_ACDC_DB, <<"nodes_accounts">>) of
+    case kapps_config:get_category(<<"acdc">>) of
         {'ok', JObj} ->
             case kz_json:get_value([<<"nodes">>, Node, <<"accounts">>], JObj) of
                 'undefined' ->
@@ -234,7 +234,7 @@ is_account_allowed(AccountId) ->
 
 -spec check_default_accounts(kz_json:object(), kz_term:ne_binary()) -> boolean().
 check_default_accounts(JObj, AccountId) ->
-    case kz_json:get_value([<<"default">>, <<"accounts">>], JObj) of
+    case kz_json:get_value([<<"nodes">>, <<"default">>, <<"accounts">>], JObj) of
         'undefined' -> 
             lager:debug("no default accounts configured"),
             'false';
