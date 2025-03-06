@@ -3332,7 +3332,7 @@ do_store_file(Tries, Timeout, API, Msg, Call) ->
                       ,kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) ->
           'ok' | {'error', any()}.
 retry_store_file(0, _Timeout, _API, Msg, Error, Call) ->
-    lager:critical("~s : ~s", [Msg, Error]),
+    lager:critical("ALL RETRIES FAILED :: ~s : ~s", [Msg, Error]),
     Funs = [{fun kapps_call:kvs_store/3, 'store_error', Error}
            ,{fun kapps_call:kvs_store/3, 'media_server', kapps_call:switch_nodename(Call)}
            ],
@@ -3343,7 +3343,7 @@ retry_store_file(0, _Timeout, _API, Msg, Error, Call) ->
                             ),
     {'error', Error};
 retry_store_file(Tries, Timeout, API, Msg, Error, Call) ->
-    lager:critical("~s : ~s", [Msg, Error]),
+    lager:critical("RETRY WITH ~p tries left :: ~s : ~s", [Tries, Msg, Error]),
     timer:sleep(5 * ?MILLISECONDS_IN_SECOND),
     do_store_file(Tries, Timeout, API, Msg, Call).
 
