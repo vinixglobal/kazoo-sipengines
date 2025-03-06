@@ -18,7 +18,8 @@
             ]
         },
         "assigned_to_sms": {
-            "map": [ "function(doc) {",
+            "map": [
+                "function(doc) {",
                 " if (doc.pvt_type != 'number' || doc.pvt_deleted) return;",
                 " if (doc.extended_attributes",
                 " && doc.extended_attributes.messaging",
@@ -28,7 +29,8 @@
                 " ) {",
                 "    doc.extended_attributes.messaging.owners.forEach(function(key) { emit(key, doc.extended_attributes.messaging.owners); });",
                 " }",
-            "}"]
+                "}"
+            ]
         },
         "list_by_app": {
             "map": [
