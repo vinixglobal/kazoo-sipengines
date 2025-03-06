@@ -43,20 +43,59 @@ handle(Data, Call) ->
                 lager:info("no owner on this device == no agent"),
                 play_not_an_agent(Call);
             {'ok', AgentId} ->
+				
                 Status = find_agent_status(Call, AgentId),
                 NewStatus = fix_data_status(kz_json:get_value(<<"action">>, Data)),
 				
 				NewToggleAction = fix_toggle_action(NewStatus, Status),
+               
+				CaptureGroup = kapps_call:kvs_fetch('cf_capture_group', Call),
+				DialedNumber = kapps_call:request_user(Call),
 
-                lager:info("agent ~s maybe changing status from ~s to ~s", [AgentId, Status, NewToggleAction]),
+				Data1 = maybe_merge_callflow_data(Data, CaptureGroup, DialedNumber, NewToggleAction),
 
-                maybe_update_status(Call, AgentId, Status, NewToggleAction, Data);
+				lager:info("Data: ~p, agent ~s maybe changing status from ~s to ~s", [Data1, AgentId, Status, NewToggleAction]),
+
+                maybe_update_status(Call, AgentId, Status, NewToggleAction, Data1);
             {'error', 'multiple_owners'} ->
                 lager:info("too many owners of device ~s, not logging in", [kapps_call:authorizing_id(Call)]),
                 play_agent_invalid(Call)
         end,
     lager:info("finished with acdc agent callflow"),
     cf_exe:continue(Call).
+
+-spec maybe_merge_callflow_data(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
+maybe_merge_callflow_data(Data, CaptureGroup, DialedNumber, Status) ->
+    CGIsEmpty = kz_term:is_empty(CaptureGroup),
+
+	PresenceIdFromDialedNumber = case { CGIsEmpty, DialedNumber } of
+		{true, Dialed} -> Dialed;
+		{false, _} -> CaptureGroup;
+		{_, Dialed} -> Dialed
+	end,
+
+	PresenceId = kz_json:get_ne_binary_value(<<"presence_id">>, Data, PresenceIdFromDialedNumber),
+	
+	%%PresenceState = case Status of
+	%%	<<"login">> -> 
+	%%		kz_json:get_ne_binary_value(<<"presence_state">>, Data,  kz_json:get_ne_binary_value(<<"presence_state_login">>, Data));
+	%%	<<"logout">> ->
+	%%		kz_json:get_ne_binary_value(<<"presence_state">>, Data,  kz_json:get_ne_binary_value(<<"presence_state_logout">>, Data))
+	%%end,
+
+	PresenceState = case Status of
+		<<"login">> -> 
+			kz_json:get_ne_binary_value(<<"presence_state_login">>, Data);
+		<<"logout">> ->
+			kz_json:get_ne_binary_value(<<"presence_state_logout">>, Data)
+	end,
+
+	case {PresenceId, PresenceState} of
+		{undefined, undefined} -> Data;
+		{undefined, _ } -> Data;
+		{_, undefined } -> Data;
+		{_, _} -> kz_json:set_values([{<<"presence_state_toggle">>, PresenceState}, {<<"presence_id_toggle">>, PresenceId}], Data)
+	end.
 
 -spec find_agent_status(kapps_call:call() | kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
 find_agent_status(?NE_BINARY = AccountId, AgentId) ->
@@ -82,6 +121,7 @@ fix_toggle_action(NewStatus, _) -> NewStatus.
 maybe_update_status(Call, AgentId, _Curr, <<"logout">>, Data) ->
     lager:info("agent ~s wants to log out (currently: ~s)", [AgentId, _Curr]),
     logout_agent(Call, AgentId, Data),
+	maybe_set_presence(kapps_call:account_id(Call), kz_json:get_ne_binary_value(<<"presence_id_toggle">>, Data), kz_json:get_ne_binary_value(<<"presence_state_toggle">>, Data)), 
     play_agent_logged_out(Call);
 maybe_update_status(Call, AgentId, <<"logged_out">>, <<"resume">>, _Data) ->
     lager:debug("agent ~s is logged out, resuming doesn't make sense", [AgentId]),
@@ -119,7 +159,9 @@ maybe_update_status(Call, _AgentId, _Status, _NewStatus, _Data) ->
 maybe_login_agent(Call, AgentId, Data) ->
     lager:debug("agent ~s wants to log in", [AgentId]),
     case login_agent(Call, AgentId, Data) of
-        <<"success">> -> play_agent_logged_in(Call);
+        <<"success">> ->
+			maybe_set_presence(kapps_call:account_id(Call), kz_json:get_ne_binary_value(<<"presence_id_toggle">>, Data), kz_json:get_ne_binary_value(<<"presence_state_toggle">>, Data)), 
+			play_agent_logged_in(Call);
         <<"failed">> -> play_agent_invalid(Call)
     end.
 
@@ -249,3 +291,17 @@ play_agent_pause(Call) -> kapps_call_command:b_prompt(<<"agent-pause">>, Call).
 
 -spec play_agent_invalid(kapps_call:call()) -> kapps_call:kapps_api_std_return().
 play_agent_invalid(Call) -> kapps_call_command:b_prompt(<<"agent-invalid_choice">>, Call).
+
+-spec maybe_set_presence(api_kz_term:ne_binary(), api_kz_term:ne_binary(), api_kz_term:ne_binary()) -> ok.
+maybe_set_presence(AccountId, PresenceId, State) -> 
+	lager:debug("Setting Presence AccountId: ~p, PresenceId: ~p, State: ~p", [AccountId, PresenceId, State]),
+	set_presence(AccountId, PresenceId, State).
+
+-spec set_presence(api_kz_term:ne_binary(), api_kz_term:ne_binary(), api_kz_term:ne_binary()) -> ok.
+set_presence(undefined, undefined, _) -> ok;
+set_presence(undefined, _, _) -> ok;
+set_presence(_, undefined, _) -> ok;
+set_presence(_, _, undefined) -> ok;
+set_presence(AccountId, PresenceId, State) -> 
+	acdc_util:presence_update(AccountId, PresenceId, State),
+	ok.

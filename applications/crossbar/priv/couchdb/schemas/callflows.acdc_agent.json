@@ -9,7 +9,8 @@
                 "login",
                 "logout",
                 "paused",
-                "resume"
+                "resume",
+                "toggle"
             ],
             "type": "string"
         },
@@ -26,6 +27,24 @@
                 "red_flash",
                 "red_solid",
                 "green"
+            ],
+            "type": "string"
+        },
+        "presence_state_login": {
+            "description": "Custom presence state to send",
+            "enum": [
+                "early",
+                "confirmed",
+                "terminated"
+            ],
+            "type": "string"
+        },
+        "presence_state_logout": {
+            "description": "Custom presence state to send",
+            "enum": [
+                "early",
+                "confirmed",
+                "terminated"
             ],
             "type": "string"
         },
