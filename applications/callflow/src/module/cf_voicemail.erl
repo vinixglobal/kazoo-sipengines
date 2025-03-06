@@ -26,6 +26,7 @@
 
 -export([handle/2]).
 -export([new_message/4]).
+-export([get_vmbox_max_messages/3]).
 
 -include("callflow.hrl").
 -include_lib("kazoo_stdlib/include/kazoo_json.hrl").
@@ -1843,6 +1844,41 @@ new_message(AttachmentName, Length, #mailbox{mailbox_number=BoxNum
         {'error', _, _Msg} -> lager:warning("failed to save voice mail message recorded media : ~p", [_Msg])
     end.
 
+-spec get_vmbox_max_messages(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> non_neg_integer().
+get_vmbox_max_messages(AccountDb, MailboxId, MailboxJObj) ->
+    AccountId = kz_json:get_ne_value(<<"pvt_account_id">>, MailboxJObj, <<"unknown">>),
+
+    lager:debug("AccountDb: ~p, MailboxId: ~p, AccountId: ~p, MailboxJObj: ~p", [AccountDb, MailboxId, AccountId, MailboxJObj]),
+
+            AccountMaxCount = case kz_datamgr:open_doc(AccountDb, AccountId) of
+                {error,not_found} -> undefined;
+                {ok, Doc} -> kz_json:get_integer_value([<<"voicemail">>, <<"max_message_count">>], Doc, undefined)
+            end,
+
+            lager:debug("AccountMaxCount: ~p", [AccountMaxCount]),
+
+            AdminMaxCount = case kz_datamgr:open_doc(AccountDb, <<"configs_voicemail">>) of
+                {error,not_found} -> undefined;
+                {ok, AdminDoc} -> kz_json:get_integer_value(<<"max_message_count">>, AdminDoc, undefined)
+            end,
+
+            lager:debug("AdminMaxCount: ~p", [AdminMaxCount]),
+
+            MailboxMaxCount = kz_json:get_integer_value(<<"max_message_count">>, MailboxJObj, undefined),
+
+            lager:debug("MailboxMaxCount: ~p", [MailboxMaxCount]),
+
+            FinalMaxCount = case {is_integer(AccountMaxCount), is_integer(MailboxMaxCount), is_integer(AdminMaxCount)} of
+                {_, _, true} -> AdminMaxCount; 
+                {_, true, false} -> MailboxMaxCount;
+                {true, false, false} -> AccountMaxCount;
+                {_, _, _} -> ?MAILBOX_DEFAULT_SIZE
+            end,
+
+            lager:debug("MAX_COUNT: AccountMaxCount: ~p, MailboxMaxCount: ~p, AdminMaxCount: ~p, FinalMaxCount: ~p", [AccountMaxCount, MailboxMaxCount, AdminMaxCount, FinalMaxCount]),
+        kz_term:to_integer(FinalMaxCount).
+
+
 %%------------------------------------------------------------------------------
 %% @doc Fetches the mailbox parameters from the data store and loads the
 %% mailbox record
@@ -1858,7 +1894,7 @@ get_mailbox_profile(Data, Call) ->
             MailboxId = kz_doc:id(MailboxJObj),
             lager:info("loaded voicemail box ~s", [MailboxId]),
             Default = #mailbox{},
-
+            
             %% Don't check if the voicemail box belongs to the owner (by default) if the call was not
             %% specifically to him, IE: calling a ring group and going to voicemail should not check
             LastAct = kapps_call:kvs_fetch('cf_last_action', Call),
@@ -1867,8 +1903,8 @@ get_mailbox_profile(Data, Call) ->
                            ),
 
             {NameMediaId, OwnerId} = owner_info(AccountDb, MailboxJObj),
-
-            MaxMessageCount = max_message_count(Call),
+            MaxMessageCount = get_vmbox_max_messages(AccountDb, MailboxId, MailboxJObj),
+            kz_json:get_ne_value(<<"max_message_count">>, MailboxJObj, max_message_count(Call)),
             MsgCount = kvm_messages:count(kapps_call:account_id(Call), MailboxId),
 
             lager:info("mailbox limited to ~p voicemail messages (has ~b currently)"
