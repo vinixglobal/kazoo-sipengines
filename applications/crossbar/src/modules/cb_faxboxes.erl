@@ -321,7 +321,7 @@ on_faxbox_successful_validation('undefined', Context) ->
                                           ,{<<"pvt_account_id">>, cb_context:account_id(Context)}
                                           ,{<<"pvt_account_db">>, cb_context:account_db(Context)}
                                           ,{<<"pvt_reseller_id">>, cb_context:reseller_id(Context)}
-                                          ,{<<"_id">>, kz_binary:rand_hex(16)}
+                                          ,{<<"_id">>, kz_json:get_ne_value(<<"id">>, cb_context:doc(Context), kz_binary:rand_hex(16))}
                                           ,{<<"pvt_smtp_email_address">>, generate_email_address(Context)}
                                           ]
                                          ,cb_context:doc(Context)
@@ -585,11 +585,25 @@ prepare_faxes_doc(Context, Action) ->
                                 ]
                                ,cb_context:doc(Context)
                                ),
+    
     Context1 = cb_context:setters(Context
                                  ,[{fun cb_context:set_account_db/2, ?KZ_FAXES_DB}
                                   ,{fun cb_context:set_doc/2, ToSave}
                                   ]),
+    
+%    Context2 = cb_context:set_doc(Context, maybe_use_supplied_id(cb_context:doc(Context1), Action)),
+    lager:debug("Creating faxbox ~p", [ToSave]),
     maybe_load_merge(Context1, Action).
+
+%%maybe_use_supplied_id(JObj, 'create') ->
+%    case kz_json:get_value(<<"id">>, JObj) of
+%    'undefined' -> JObj;
+%    ID ->
+%        lager:debug("Found ID we need to set it here"), 
+%        kz_json:delete_key(<<"id">>, kz_json:set_value(<<"_id">>, ID, JObj))
+%    end;
+%maybe_use_supplied_id(JObj, '_') ->
+%    JObj.
 
 -spec maybe_load_merge(cb_context:context(), 'create' | 'update') -> cb_context:context().
 maybe_load_merge(Context, 'create') ->
