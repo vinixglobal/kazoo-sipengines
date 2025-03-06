@@ -1551,12 +1551,12 @@ answered('cast', ?DESTROYED_CHANNEL(CallId, _Cause), #state{account_id=AccountId
                                                    ,queue_notifications=Ns
                                                    ,outbound_call_ids=[OutboundCallId|_]
                                                    }=State) ->
-    lager:debug("caller's channel hung up, but there are still some outbounds"),
+    lager:debug("caller's channel hung up, but there are still some outbounds: ~p", [ OutboundCallId ]),
     _ = acdc_stats:call_processed(AccountId, QueueId, AgentId, original_call_id(State), 'member'),
     acdc_agent_listener:channel_hungup(AgentListener, CallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
-%%    {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
-    {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, State), 'hibernate'};
+    %%%%{'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
+	{'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, State), 'hibernate'};
 
 answered('cast', ?DESTROYED_CHANNEL(CallId, Cause), #state{agent_call_id=CallId
                                                   ,outbound_call_ids=[]
@@ -1572,12 +1572,13 @@ answered('cast', ?DESTROYED_CHANNEL(CallId, _Cause), #state{account_id=AccountId
                                                    ,agent_call_id=CallId
                                                    ,outbound_call_ids=[OutboundCallId|_]
                                                    }=State) ->
-    lager:debug("agent's channel hung up, but there are still some outbounds"),
+    lager:debug("agent's channel hung up, but there are still some outbounds: ~p ", [OutboundCallId]),
+	lager:debug("ANSWERED:Just hungup: ~p. OutBoundCallId: ~p", [CallId, OutboundCallId]),
     _ = acdc_stats:call_processed(AccountId, QueueId, AgentId, original_call_id(State), 'agent'),
     acdc_agent_listener:channel_hungup(AgentListener, MemberCallId),
     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
-%%    {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
-    {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, State), 'hibernate'};
+	%%%%{'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
+	{'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, State), 'hibernate'};
 %%    {'next_state', 'answered', State, 'hibernate'};
 
 answered('cast', ?DESTROYED_CHANNEL(CallId, _Cause), #state{agent_listener=AgentListener
@@ -1585,9 +1586,10 @@ answered('cast', ?DESTROYED_CHANNEL(CallId, _Cause), #state{agent_listener=Agent
                                                    }=State) ->
     case lists:member(CallId, OutboundCallIds) of
         'true' ->
-            lager:debug("agent outbound channel ~s down", [CallId]),
+            lager:debug("agent outbound channel ~s down, OutboundCallIds: ~p", [CallId, OutboundCallIds]),
             acdc_util:unbind_from_call_events(CallId, AgentListener),
             {'next_state', 'answered', State#state{outbound_call_ids=lists:delete(CallId, OutboundCallIds)}};
+			%{'next_state', 'answered', State#state{outbound_call_ids=[]}};
  %           {'next_state', 'answered', State};
         'false' ->
             lager:debug("unexpected channel ~s down", [CallId]),
@@ -2316,7 +2318,7 @@ start_outbound_call_handling(CallId, Number, Name, #state{agent_listener=AgentLi
                                                          ,outbound_call_ids=OutboundCallIds
                                                          }=State) when is_binary(CallId) ->
     kz_util:put_callid(CallId),
-    lager:debug("agent making outbound call, not receiving ACDc calls"),
+    lager:debug("agent making outbound call, not receiving ACDc calls. OutboundCallIds: ~p", [OutboundCallIds]),
     acdc_agent_listener:outbound_call(AgentListener, CallId, Number, Name),
     acdc_agent_stats:agent_outbound(AccountId, AgentId, CallId, Number, Name),
     State#state{outbound_call_ids=[CallId | lists:delete(CallId, OutboundCallIds)]}.
@@ -2397,10 +2399,10 @@ missed_reason(Reason) -> Reason.
 
 -spec find_username(kz_json:object()) -> kz_term:api_binary().
 find_username(EP) ->
-    find_sip_username(EP, kzd_devices:sip_username(EP)).
+	find_sip_username(EP, kzd_devices:sip_username(EP)).
 
 -spec find_sip_username(kz_json:object(), kz_term:api_binary()) -> kz_term:api_binary().
-find_sip_username(EP, 'undefined') -> kz_json:get_value(<<"To-User">>, EP);
+find_sip_username(EP, 'undefined') -> kz_json:get_value(<<"To-Username">>, EP);
 find_sip_username(_EP, Username) -> Username.
 
 -spec find_extension(kz_json:object()) -> kz_term:api_binary().
@@ -2422,6 +2424,7 @@ monitor_endpoint(EP, AccountId) ->
     Username = find_username(EP),
     Extension = find_extension(EP),
     %% Inform us of device changes
+	lager:debug("MONITOR_ENDPOINT AccountId: ~p, Username: ~p, Extension: ~p", [AccountId, Username, Extension]),
     catch gproc:reg(?ENDPOINT_UPDATE_REG(AccountId, find_endpoint_id(EP))),
     catch gproc:reg(?NEW_CHANNEL_REG(AccountId, Username)),
     catch gproc:reg(?DESTROYED_CHANNEL_REG(AccountId, Username)),

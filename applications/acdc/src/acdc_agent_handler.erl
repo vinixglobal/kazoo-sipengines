@@ -224,6 +224,7 @@ handle_sync_resp(JObj, Props) ->
 
 -spec handle_call_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_call_event(JObj, Props) ->
+	lager:debug("handle_call_event/2 JObj: ~p, Props: ~p", [ JObj, Props]),
     _ = kz_util:put_callid(JObj),
     FSM = props:get_value('fsm_pid', Props),
     case kapi_call:event_v(JObj) of
@@ -304,7 +305,7 @@ handle_destroyed_channel(JObj, AccountId) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     HangupCause = acdc_util:hangup_cause(JObj),
 
-    lager:debug("destroyed channel in acct ~s: from ~s to ~s", [AccountId, FromUser, ToUser]),
+    lager:debug("destroyed channel in acct ~s: from ~s to ~s, direction: ~p, CallId: ~p", [AccountId, FromUser, ToUser, kz_call_event:call_direction(JObj), CallId]),
 
     case kz_call_event:call_direction(JObj) of
         <<"inbound">> -> gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
