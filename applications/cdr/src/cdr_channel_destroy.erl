@@ -32,7 +32,7 @@ should_handle_cdr(AccountId) when AccountId =:= undefined ->
 
 should_handle_cdr(AccountId) ->
 	FormattedAccountIdBinary = kz_util:format_account_db(<<AccountId/binary>>),
-	case kz_datamgr:open_cache_doc(FormattedAccountIdBinary, AccountId) of test. 
+	case kz_datamgr:open_cache_doc(FormattedAccountIdBinary, AccountId) of 
 		{error,not_found} -> 'false';
 		{ok, Doc} -> kz_json:get_value(<<"write_cdr">>, Doc, 'false')
 	end.
