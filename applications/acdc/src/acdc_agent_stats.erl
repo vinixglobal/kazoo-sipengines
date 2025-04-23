@@ -265,10 +265,21 @@ handle_agent_calls_query(JObj, _Prop) ->
 publish_agent_call_query_errors(RespQ, MsgId, Errors) ->
     acdc_stats_util:publish_query_errors(RespQ, MsgId, Errors, fun kapi_acdc_stats:publish_agent_calls_err/2).
 
-
-
 -spec handle_status_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_status_stat(JObj, Props) ->
+    AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
+    AccountId=kz_json:get_value(<<"Account-ID">>, JObj),
+
+    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
+        'undefined' ->
+            lager:debug("Ignoring status stat creation for ~s(~s) - not on this node", [AgentId, AccountId]),
+            {'undefined', 'not_our_agent'};
+        _Sup ->
+            handle_status_stat_filtered(JObj, Props)
+    end.
+
+-spec handle_status_stat_filtered(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_status_stat_filtered(JObj, Props) ->
     'true' = case (EventName = kz_json:get_value(<<"Event-Name">>, JObj)) of
                  <<"ready">> -> kapi_acdc_stats:status_ready_v(JObj);
                  <<"logged_in">> -> kapi_acdc_stats:status_logged_in_v(JObj);
@@ -285,9 +296,10 @@ handle_status_stat(JObj, Props) ->
                      lager:warning("recv unknown status stat type ~s: ~p", [_Name, JObj]),
                      'false'
              end,
-
+    
     AgentId = kz_json:get_value(<<"Agent-ID">>, JObj),
     Timestamp = kz_json:get_integer_value(<<"Timestamp">>, JObj),
+    
 
     gen_listener:cast(props:get_value('server', Props)
                      ,{'create_status'
